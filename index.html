@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MovieFlix - Browse Content</title>
+    <!-- HLS.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        :root { --primary-color: #4F46E5; --background-color: #F8F9FA; --card-background: #FFFFFF; --text-primary: #111827; --text-secondary: #6B7280; --border-color: #E5E7EB; --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1); --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1); --border-radius-md: 12px; --transition-speed: 0.3s; --skeleton-bg: #e0e0e0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--background-color); color: var(--text-primary); }
+        img { pointer-events: none; }
+        .view { display: none; opacity: 0; transition: opacity var(--transition-speed) ease-out; }
+        .view.active { display: block; opacity: 1; }
+        .header { background-color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px) saturate(180%); padding: 15px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; }
+        .header-logo { font-size: 1.5rem; font-weight: 800; color: var(--primary-color); }
+        .main-content { padding: 90px 24px 40px; }
+        .movie-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 30px; }
+        .movie-card { cursor: pointer; opacity: 0; transform: translateY(20px); animation: fadeIn 0.5s ease-out forwards; }
+        .movie-poster-wrapper { transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease; border-radius: var(--border-radius-md); overflow: hidden; box-shadow: var(--shadow-md); }
+        .movie-card:hover .movie-poster-wrapper { transform: translateY(-10px) scale(1.03); box-shadow: var(--shadow-lg); }
+        .movie-poster { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; display: block; background-color: var(--border-color); }
+        .skeleton-card { flex: 0 0 160px; }
+        .skeleton-poster { width: 100%; aspect-ratio: 2 / 3; border-radius: var(--border-radius-md); background-color: var(--skeleton-bg); }
+        .movie-detail-view { padding: 24px; animation: slideInUp 0.5s ease-out; }
+        .detail-header { display: flex; align-items: center; margin-top: 40px; margin-bottom: 24px; height: 44px; margin-left: -15px; }
+        .back-button { cursor: pointer; background: transparent; border: none; width: 44px; height: 44px; }
+        .detail-content { text-align: center; }
+        .detail-content img { width: 65%; max-width: 250px; height: auto; border-radius: var(--border-radius-md); box-shadow: var(--shadow-lg); margin-bottom: 30px; }
+        #action-container { margin: 30px auto; max-width: 500px; }
+        .watch-now-btn { background: linear-gradient(to bottom, #5d55fa, #4F46E5); color: white; border: 1px solid #3a32b3; border-bottom-width: 4px; padding: 16px 32px; border-radius: 50px; font-size: 1.1rem; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.1s ease-in-out; text-shadow: 0 -1px 0 rgba(0,0,0,0.2); }
+        .watch-now-btn:active { transform: translateY(2px); border-bottom-width: 2px; }
+        #episodes-list { margin-top: 25px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .episode-list-item { background: linear-gradient(to bottom, #ffffff, #f8f9fa); border: 1px solid var(--border-color); border-bottom-width: 3px; padding: 15px 10px; border-radius: var(--border-radius-md); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.1s ease-in-out; }
+        .episode-list-item:active { transform: translateY(1px); border-bottom-width: 2px; }
+        @media (hover: hover) { .episode-list-item:hover { background: linear-gradient(to bottom, #f8f9fa, #e9ecef); border-color: #dee2e6; } }
+        .episode-title { font-weight: 600; pointer-events: none; font-size: 0.9rem; }
+        #watchView { background-color: var(--background-color); }
+        .player-container { position: sticky; top: 0; width: 100%; background: black; z-index: 1001; }
+        #watchBackButton { position: absolute; top: 5px; left: 5px; z-index: 10; background: transparent; border: none; }
+        #moviePlayer { width: 100%; aspect-ratio: 16/9; background: #000; display: block; }
+        .recommendations { padding: 24px; }
+        @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <header class="header" id="mainHeader"><div class="header-logo">MovieFlix</div></header>
+
+    <div id="mainView" class="view active">
+        <div class="main-content"><div class="movie-grid" id="movie-grid"></div></div>
+    </div>
+
+    <div id="movieDetailView" class="view">
+        <div class="movie-detail-view">
+            <div class="detail-header">
+                <button class="back-button" id="detailBackButton"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="32" height="32"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg></button>
+            </div>
+            <div class="detail-content">
+                <img id="detailPoster" src="">
+                <div id="action-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="watchView" class="view">
+        <div class="player-container">
+            <button class="back-button" id="watchBackButton"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="#fff" width="32" height="32"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg></button>
+            <video id="moviePlayer" controls controlslist="nodownload" oncontextmenu="return false;" autoplay></video>
+        </div>
+        <div class="recommendations">
+            <div class="movie-grid" id="recommendations-grid"></div>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const NPOINT_URL = 'https://api.npoint.io/f5c5f2f2ac0558f38dc4';
+    const appData = { allContent: [], visibleContent: [], currentContent: null, currentEpisodeIndex: 0 };
+    const ui = {
+        views: document.querySelectorAll('.view'),
+        mainHeader: document.getElementById('mainHeader'),
+        mainView: document.getElementById('mainView'),
+        movieGrid: document.getElementById('movie-grid'),
+        detailView: document.getElementById('movieDetailView'),
+        detailBackButton: document.getElementById('detailBackButton'),
+        detailPoster: document.getElementById('detailPoster'),
+        actionContainer: document.getElementById('action-container'),
+        watchView: document.getElementById('watchView'),
+        watchBackButton: document.getElementById('watchBackButton'),
+        moviePlayer: document.getElementById('moviePlayer'),
+        recommendationsGrid: document.getElementById('recommendations-grid'),
+    };
+    let hls;
+
+    function goBackToMainView() {
+        if (hls) { hls.destroy(); }
+        ui.moviePlayer.src = '';
+        ui.mainHeader.style.display = 'flex';
+        ui.views.forEach(view => view.classList.remove('active'));
+        ui.mainView.classList.add('active');
+        window.scrollTo(0, 0);
+    }
+    function switchView(viewToShow) {
+        ui.mainHeader.style.display = (viewToShow === ui.watchView) ? 'none' : 'flex';
+        if(viewToShow !== ui.watchView) { ui.moviePlayer.pause(); }
+        ui.views.forEach(view => view.classList.remove('active'));
+        viewToShow.classList.add('active');
+        window.scrollTo(0, 0);
+    }
+
+    function renderSkeletons(container) {
+        container.innerHTML = Array(30).fill('<div class="skeleton-card"><div class="skeleton-poster"></div></div>').join('');
+    }
+
+    function renderGrid(contentList, container) {
+        container.innerHTML = !contentList || contentList.length === 0 ? '' : contentList.map((item, index) => `
+            <div class="movie-card" data-id="${item.id}" style="animation-delay: ${index * 0.05}s;">
+                <div class="movie-poster-wrapper"><img src="${item.poster}" alt="Poster" class="movie-poster"></div>
+            </div>`).join('');
+    }
+
+    function showDetailView(contentId) {
+        appData.currentContent = appData.allContent.find(c => c.id === contentId);
+        if (!appData.currentContent) return;
+        
+        const item = appData.currentContent;
+        ui.detailPoster.src = item.poster;
+        
+        let actionHtml = `<button class="watch-now-btn">Watch Now</button>`;
+
+        if (item.type === 'series' && item.episodes) {
+            let episodesHtml = '<div id="episodes-list">';
+            item.episodes.forEach((episode, index) => {
+                episodesHtml += `
+                    <div class="episode-list-item" data-episode-index="${index}">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
+                        <span class="episode-title">Episode ${index + 1}</span>
+                    </div>`;
+            });
+            episodesHtml += '</div>';
+            actionHtml += episodesHtml;
+        }
+        
+        ui.actionContainer.innerHTML = actionHtml;
+        switchView(ui.detailView);
+    }
+
+    function playVideo(videoUrl, type = 'movie') {
+        if (hls) { hls.destroy(); }
+        if (type === 'live' && Hls.isSupported()) {
+            hls = new Hls();
+            hls.loadSource(videoUrl);
+            hls.attachMedia(ui.moviePlayer);
+        } else {
+            ui.moviePlayer.src = videoUrl;
+        }
+        ui.moviePlayer.play();
+        const recommended = appData.visibleContent.filter(c => c.id !== (appData.currentContent ? appData.currentContent.id : null));
+        renderGrid(recommended, ui.recommendationsGrid);
+        switchView(ui.watchView);
+    }
+
+    function playEpisode(series, index) {
+        if (!series.episodes || index >= series.episodes.length) {
+            goBackToMainView();
+            return;
+        }
+        appData.currentEpisodeIndex = index;
+        playVideo(series.episodes[index].videoUrl, 'movie');
+    }
+
+    function setupEventListeners() {
+        document.body.addEventListener('click', (e) => {
+            const card = e.target.closest('.movie-card');
+            if (card) { showDetailView(Number(card.dataset.id)); return; }
+
+            const watchBtn = e.target.closest('.watch-now-btn');
+            if (watchBtn) {
+                if (!appData.currentContent) return;
+                if (appData.currentContent.type === 'series') {
+                    playEpisode(appData.currentContent, 0);
+                } else {
+                    playVideo(appData.currentContent.videoUrl, appData.currentContent.type);
+                }
+                return;
+            }
+            
+            const episodeItem = e.target.closest('.episode-list-item');
+            if (episodeItem) {
+                if (!appData.currentContent) return;
+                const index = Number(episodeItem.dataset.episodeIndex);
+                playEpisode(appData.currentContent, index);
+            }
+        });
+
+        ui.moviePlayer.addEventListener('ended', () => {
+            if (appData.currentContent && appData.currentContent.type === 'series') {
+                playEpisode(appData.currentContent, appData.currentEpisodeIndex + 1);
+            }
+        });
+
+        ui.detailBackButton.addEventListener('click', goBackToMainView);
+        ui.watchBackButton.addEventListener('click', goBackToMainView);
+    }
+    
+    async function init() {
+        renderSkeletons(ui.movieGrid);
+        try {
+            const response = await fetch(NPOINT_URL + '?_=' + new Date().getTime());
+            if (!response.ok) throw new Error('Network error');
+            const data = await response.json();
+            appData.allContent = data.movies || [];
+            appData.visibleContent = appData.allContent.filter(item => item.isVisible !== false);
+            renderGrid(appData.visibleContent, ui.movieGrid);
+            setupEventListeners();
+        } catch (error) {
+            ui.movieGrid.innerHTML = '';
+        }
+    }
+    init();
+});
+</script>
+</body>
+</html>
